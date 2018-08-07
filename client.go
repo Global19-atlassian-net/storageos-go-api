@@ -43,6 +43,9 @@ var (
 	// ErrProxyNotSupported is returned when a client is unable to set a proxy for http requests.
 	ErrProxyNotSupported = errors.New("client does not support http proxy")
 
+	// ErrMixedProtocols is returned when a client has a combination of HTTPS addresses and non-HTTPS addresses.
+	ErrMixedProtocols = errors.New("https addresses should not be mixed with insecure protocol")
+
 	// DefaultPort is the default API port.
 	DefaultPort = "5705"
 
@@ -120,7 +123,7 @@ func NewClient(nodes string) (*Client, error) {
 }
 
 // NewVersionedClient returns a Client instance ready for communication with
-// the given server endpoint, using a specific remote API version.
+// the given server endpoints, using a specific remote API version.
 func NewVersionedClient(nodestring string, apiVersionString string) (*Client, error) {
 	nodes := strings.Split(nodestring, ",")
 	addresses, err := netutil.AddressesFromNodes(nodes)
@@ -130,8 +133,28 @@ func NewVersionedClient(nodestring string, apiVersionString string) (*Client, er
 
 	var useTLS bool
 	if len(nodes) > 0 {
-		if u, err := url.Parse(nodes[0]); err == nil && u.Scheme == "https" {
-			useTLS = true
+		u, err := url.Parse(nodes[0])
+		if err == nil {
+			if u.Scheme == "https" {
+				useTLS = true
+			}
+			// Insist upon not mixing http & https
+			for _, node := range nodes[0:] {
+				u, err := url.Parse(node)
+				if err != nil {
+					return nil, serror.NewTypedStorageOSError(serror.InvalidHostConfig, err, fmt.Sprintf("failed to parse node: %s", node), "ensure that the given nodes have valid URLs")
+				}
+				switch u.Scheme {
+				case "https":
+					if !useTLS {
+						return nil, ErrMixedProtocols
+					}
+				default:
+					if useTLS {
+						return nil, ErrMixedProtocols
+					}
+				}
+			}
 		}
 	}
 

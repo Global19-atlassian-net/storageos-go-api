@@ -91,6 +91,54 @@ func TestNewClientNoSchemeEndpoint(t *testing.T) {
 	}
 }
 
+func TestNewClientMixedSchemeEndpoint(t *testing.T) {
+	tcs := []struct {
+		nodes      string
+		wantClient bool
+		wantErr    error
+	}{
+		{
+			nodes:   "http://localhost:4244,http://localhost:4243",
+			wantErr: nil,
+		},
+		{
+			nodes:   "https://localhost:4244,https://localhost:4243",
+			wantErr: nil,
+		},
+		{
+			nodes:   "http://localhost:4244,https://localhost:4243,http://localhost:4242",
+			wantErr: ErrMixedProtocols,
+		},
+		{
+			nodes:   "tcp://localhost:4244,https://localhost:4243,http://localhost:4242",
+			wantErr: ErrMixedProtocols,
+		},
+		{
+			nodes:   "tcp://localhost:4244,https://localhost:4243,tcp://localhost:4242",
+			wantErr: ErrMixedProtocols,
+		},
+		{
+			nodes:   "localhost:4244,https://localhost:4243,localhost:4242",
+			wantErr: ErrMixedProtocols,
+		},
+		{
+			nodes:   "tcp://localhost:4244,http://localhost:4243,localhost:4242",
+			wantErr: nil,
+		},
+	}
+	for _, tc := range tcs {
+		client, err := NewClient(tc.nodes)
+		if err != tc.wantErr {
+			t.Errorf("Wanted err %#v, got err %#v", tc.wantErr, err)
+		}
+		if err != nil && client != nil {
+			t.Errorf("Want nil client, got %#v", client)
+		} else if err == nil && client == nil {
+			t.Errorf("Wanted non-nil client, got %#v", client)
+		}
+	}
+}
+
 func TestGetURLVersioned(t *testing.T) {
 	fakeRT := &FakeRoundTripper{message: "", status: http.StatusOK}
 
